@@ -27,6 +27,7 @@ except:
     SPARSE_ADAM_AVAILABLE = False
 
 
+
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background, train_test_exp, separate_sh):
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
@@ -64,6 +65,10 @@ if __name__ == "__main__":
     parser = ArgumentParser(description="Testing script parameters")
     model = ModelParams(parser, sentinel=True)
     pipeline = PipelineParams(parser)
+    # ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+    parser.add_argument("--samples", type=str, default="samples.txt",
+                        help="path to your samples.txt (每行 x y z)")
+    # ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
     parser.add_argument("--iteration", default=-1, type=int)
     parser.add_argument("--skip_train", action="store_true")
     parser.add_argument("--skip_test", action="store_true")
@@ -74,4 +79,18 @@ if __name__ == "__main__":
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
+    # ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+    # —— 新增：读取 samples.txt 并拷贝到 GPU constant memory ——  
+    import numpy as np
+    import diff_gaussian_rasterization as dgr
+    # 从命令行拿到样本文件路径
+    samples = np.loadtxt(args.samples, dtype=np.float32)   # shape = (N,3)
+    N = samples.shape[0]
+    assert N <= dgr.MAX_STD_SAMPLES, \
+        f"样本数 N={N} 超过常量区最大支持 {dgr.MAX_STD_SAMPLES}"
+    
+    # 调用我们在 ext.cpp 里绑定的接口，把 samples 拷到 __constant__ 内存
+    dgr.upload_samples_to_constant(samples, int(N))
+    # ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+    
     render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, SPARSE_ADAM_AVAILABLE)
