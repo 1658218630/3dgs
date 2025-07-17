@@ -221,7 +221,6 @@ int CudaRasterizer::Rasterizer::forward(
 	int* radii,
 	bool debug,
 	bool use_proj_mean)
-	// /*use_proj_mean=*/true)
 {
 	const float focal_y = height / (2.0f * tan_fovy);
 	const float focal_x = width / (2.0f * tan_fovx);
@@ -276,7 +275,7 @@ int CudaRasterizer::Rasterizer::forward(
 		geomState.tiles_touched,
 		prefiltered,
 		use_proj_mean
-	), debug)
+		), debug)
 
 	// Compute prefix sum over full list of touched tile counts by Gaussians
 	// E.g., [2, 3, 0, 2, 1] -> [2, 5, 5, 7, 8]

@@ -34,7 +34,7 @@ std::function<char*(size_t N)> resizeFunctional(torch::Tensor& t) {
     return lambda;
 }
 
-std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 RasterizeGaussiansCUDA(
 	const torch::Tensor& background,
 	const torch::Tensor& means3D,
@@ -54,7 +54,9 @@ RasterizeGaussiansCUDA(
 	const int degree,
 	const torch::Tensor& campos,
 	const bool prefiltered,
-	const bool debug)
+	const bool antialiasing,
+	const bool debug,
+	const bool use_proj_mean)
 {
   if (means3D.ndimension() != 2 || means3D.size(1) != 3) {
     AT_ERROR("means3D must have dimensions (num_points, 3)");
@@ -64,12 +66,17 @@ RasterizeGaussiansCUDA(
   const int H = image_height;
   const int W = image_width;
 
-//   auto int_opts = means3D.options().dtype(torch::kInt32);
+  auto int_opts = means3D.options().dtype(torch::kInt32);
   auto float_opts = means3D.options().dtype(torch::kFloat32);
 
   torch::Tensor out_color = torch::full({NUM_CHANNELS, H, W}, 0.0, float_opts);
-//   torch::Tensor radii = torch::full({P}, 0, means3D.options().dtype(	torch::kInt32));
-  torch::Tensor radii = torch::full({P}, 0.0f, means3D.options().dtype(torch::kFloat32));
+  torch::Tensor out_invdepth = torch::full({0, H, W}, 0.0, float_opts);
+  float* out_invdepthptr = nullptr;
+
+  out_invdepth = torch::full({1, H, W}, 0.0, float_opts).contiguous();
+  out_invdepthptr = out_invdepth.data<float>();
+
+  torch::Tensor radii = torch::full({P}, 0, means3D.options().dtype(torch::kInt32));
   
   torch::Device device(torch::kCUDA);
   torch::TensorOptions options(torch::kByte);
@@ -111,11 +118,13 @@ RasterizeGaussiansCUDA(
 		tan_fovy,
 		prefiltered,
 		out_color.contiguous().data<float>(),
-		// radii.contiguous().data<int>(),
-		radii.contiguous().data<float>(),
-		debug);
+		out_invdepthptr,
+		antialiasing,
+		radii.contiguous().data<int>(),
+		debug,
+		use_proj_mean);
   }
-  return std::make_tuple(rendered, out_color, radii, geomBuffer, binningBuffer, imgBuffer);
+  return std::make_tuple(rendered, out_color, radii, geomBuffer, binningBuffer, imgBuffer, out_invdepth);
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
@@ -141,7 +150,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
 	const int R,
 	const torch::Tensor& binningBuffer,
 	const torch::Tensor& imageBuffer,
-	const bool debug) 
+	const bool debug,
+	const bool use_proj_mean) 
 {
   const int P = means3D.size(0);
   const int H = dL_dout_color.size(1);
@@ -181,7 +191,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
 	  tan_fovx,
 	  tan_fovy,
 	  radii.contiguous().data<int>(),
-	//   radii.contiguous().data<float>(),
 	  reinterpret_cast<char*>(geomBuffer.contiguous().data_ptr()),
 	  reinterpret_cast<char*>(binningBuffer.contiguous().data_ptr()),
 	  reinterpret_cast<char*>(imageBuffer.contiguous().data_ptr()),
@@ -195,7 +204,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
 	  dL_dsh.contiguous().data<float>(),
 	  dL_dscales.contiguous().data<float>(),
 	  dL_drotations.contiguous().data<float>(),
-	  debug);
+	  debug,
+	  use_proj_mean); 
   }
 
   return std::make_tuple(dL_dmeans2D, dL_dcolors, dL_dopacity, dL_dmeans3D, dL_dcov3D, dL_dsh, dL_dscales, dL_drotations);

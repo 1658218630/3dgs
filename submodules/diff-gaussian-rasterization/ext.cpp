@@ -76,7 +76,7 @@ namespace {
 //  Forward  Wrapper: first ensure samples are loaded, then call original implementation
 // ──────────────────────────────────────────────────────────────
 std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor,
-           torch::Tensor, torch::Tensor>
+           torch::Tensor, torch::Tensor, torch::Tensor>
 rasterize_gaussians_autoload(
     const torch::Tensor& background,
     const torch::Tensor& means3D,
@@ -96,13 +96,15 @@ rasterize_gaussians_autoload(
     const int            degree,
     const torch::Tensor& campos,
     const bool           prefiltered,
-    const bool           debug)
+    const bool           antialiasing,
+    const bool           debug,
+    const bool           use_proj_mean)
 {
     load_std_samples_once();      // Key: only execute once
     return RasterizeGaussiansCUDA(background, means3D, colors, opacity, scales, rotations,
                                   scale_modifier, cov3D_precomp, viewmatrix, projmatrix,
                                   tan_fovx, tan_fovy, image_height, image_width,
-                                  sh, degree, campos, prefiltered, debug);
+                                  sh, degree, campos, prefiltered, antialiasing, debug, use_proj_mean);
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -132,13 +134,14 @@ rasterize_gaussians_backward_autoload(
     const int            R,
     const torch::Tensor& binningBuffer,
     const torch::Tensor& imageBuffer,
-    const bool           debug)
+    const bool           debug,
+    const bool           use_proj_mean)
 {
     load_std_samples_once();
     return RasterizeGaussiansBackwardCUDA(background, means3D, radii, colors, opacities, scales, rotations,
                                           scale_modifier, cov3D_precomp, viewmatrix, projmatrix,
                                           tan_fovx, tan_fovy, dL_dout_color, sh, degree, campos,
-                                          geomBuffer, R, binningBuffer, imageBuffer, debug);
+                                          geomBuffer, R, binningBuffer, imageBuffer, debug, use_proj_mean);
 }
 
 
